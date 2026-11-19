@@ -1,0 +1,8 @@
+[package]
+name = "reserve"
+version = "0.1.0"
+edition = "2024"
+description = "Learning Rust by building an inventory reservation service, one step at a time"
+publish = false
+
+[dependencies]
