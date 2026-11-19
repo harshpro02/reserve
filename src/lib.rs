@@ -1,6 +1,8 @@
 // Day 1: one product, one process, and a basic reservation rule.
 // Database transactions and simultaneous buyers come in a later lesson.
 
+pub mod reservations;
+
 #[derive(Debug, PartialEq)]
 pub enum ReserveError {
     InvalidQuantity,
