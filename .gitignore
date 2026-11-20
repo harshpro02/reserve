@@ -1,2 +1,7 @@
 /target/
 .env
+.env.*
+!.env.example
+/reports/
+/data/ml-100k/
+*.pid

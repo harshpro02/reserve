@@ -1,61 +1,54 @@
-# Reserve — learning Rust through inventory reservations
+# Reserve
 
-We are building this in small lessons over approximately one week, followed by
-Restock Radar in week two. This folder is the Rust implementation. The separate
-Rails prototype is retained as a reference.
+An inventory reservation service in Rust, Axum and PostgreSQL. Create
+time-limited holds, confirm checkout, cancel holds and retry accepted requests
+safely across API processes. Local dashboard: http://localhost:4101.
 
-## Day 1: reserve a few items
+## Run
 
-Start with five shirts. Alice holds three, leaving two available. Bob holds
-the remaining two, leaving zero available. Nothing has been sold yet, so there
-are still five physical items, all held. The tests also cover rejecting a
-request for more than the available stock.
+Use the parent lab scripts, or configure PostgreSQL with `DATABASE_URL` and run:
 
-```text
-available = on_hand - held
+```sh
+cargo run --bin server
+cargo test
+cargo clippy --all-targets -- -D warnings
 ```
 
-The fields are private so callers use the reservation method to change the hold
-count. Quantity zero and quantities larger than available stock return errors
-without changing the stock.
+From PowerShell on this laptop: `./dev.ps1 serve`. The original teaching example
+is `./dev.ps1 run`; the pure in-memory lifecycle example is `./dev.ps1 checkout`.
+The HTTP service uses PostgreSQL, not the teaching example's in-memory state.
 
-## Run from PowerShell
+## API
 
-Rust is installed in Ubuntu (WSL). From this folder:
+- `GET /api/state`: products, current available/held units and recent holds.
+- `POST /api/reservations`: `sku`, positive `quantity`, `ttl_seconds` (1–3600),
+  and `idempotency_key` (1–128 bytes).
+- `POST /api/reservations/{id}/confirm`: complete a held checkout, retry safely.
+- `POST /api/reservations/{id}/cancel`: release a hold, retry safely.
 
-```powershell
-.\dev.ps1 run
-.\dev.ps1 test
-```
+Each writer takes a PostgreSQL row lock on the SKU before checking availability
+or transitioning a hold. Expiry uses database time after lock acquisition.
+Accepted creation retries persist by `(sku, request_key)`; changing quantity
+or TTL with that key returns a conflict. Rejected creates are not cached.
+Confirm reduces physical stock once. Cancel and expiry only release held units.
+Snapshots and writes reclaim expired holds; no separate scheduler is required
+for availability correctness, and no background scheduler is implemented.
 
-From an Ubuntu terminal in the same folder, use `cargo run` and `cargo test`.
+## Evidence
 
-Other checks: `./dev.ps1 fmt` and `./dev.ps1 clippy`.
+Pure-rule unit tests remain in `src/lib.rs` and `src/reservations.rs`. The parent
+`verify-all.py` tests the actual HTTP/PostgreSQL implementation: two-process
+competition, concurrent creation/confirmation retries, restart persistence,
+expiry boundaries and invalid inputs. The machine-generated local benchmark
+report is `../reports/integration.json`; it is not production capacity evidence.
 
-Verified on November 18, 2026 with Rust 1.100.0 in Ubuntu WSL: the example
-runs, all four tests pass, formatting passes, and Clippy reports no warnings.
+## Boundaries
 
-## Read these files in order
+Local demo without payment processing, authentication, checkout ownership,
+multi-tenant data isolation or HA deployment. A bounded pool reuses up to 16 PostgreSQL connections per API process. One hot SKU is serialised, and the dashboard locks
+all SKU rows while taking its snapshot. These are deliberate simplicity
+tradeoffs, not claims of production-scale throughput. Local demo database
+defaults are documented in the parent README and must not be used publicly.
 
-1. `src/main.rs`: the example with Alice and Bob.
-2. `src/lib.rs`: the stock representation, reservation rule, and tests.
-3. `lessons/day-01.md`: explanations and a small exercise.
-
-## What this step covers
-
-- A `struct` to group stock data.
-- An `enum` to describe possible errors.
-- `&self` to read stock and `&mut self` to change it.
-- `Result` to return success or an expected failure.
-- Tests for successful, invalid, and sequential requests.
-
-## Later steps
-
-Add real reservation records and expiry, an Axum API, PostgreSQL transactions,
-durable idempotency keys, concurrency checks, and a small dashboard. These are
-not implemented in this Rust starter. The current data exists only in memory
-and resets on each run. Its tests do not establish concurrent or production
-correctness.
-
-References: [Rust Book](https://doc.rust-lang.org/book/) and
-[official installation guide](https://rust-lang.org/tools/install/).
+Read `INTERVIEW.md` for the correctness argument and follow-up questions.
+The original beginner walkthrough remains in `lessons/day-01.md`.
